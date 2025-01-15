@@ -1,86 +1,115 @@
 #!/bin/bash
-# This is metabarcoding data processing script
+# This is a metabarcoding data processing script
 
+# Enable strict error handling
+set -euo pipefail
 
-# Set working directory
+# Log file for capturing output and errors
+LOG_FILE="processing.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-cd /mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/fastq
+# Setup directories - you need a directory where you have your fastq files and a directory where output will be generated
+DATA_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/fastq"
+OUTPUT_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo"
+SCRIPT_DIR="$(dirname "$0")"
 
-# list all fasta files and count them
+# Ensure output directory exists
+mkdir -p "$OUTPUT_DIR"
+
+echo "Starting metabarcoding data processing..."
+echo "Working directory: $DATA_DIR"
+echo "Output directory: $OUTPUT_DIR"
+
+# Change to data directory
+cd "$DATA_DIR"
+
+# List all FASTQ files and count them
+echo "Counting FASTQ files..."
 ls *.fastq.gz | wc -l
 
-# Activating qiime
-
+# Activate QIIME2 environment
+echo "Activating QIIME2 environment..."
 conda activate qiime2-2023.5
 
-# Creating a Manifest File
+# Step 1: Create Manifest File
+echo "Creating manifest file..."
+echo "sample-id,absolute-filepath,direction" > "$OUTPUT_DIR/manifest.csv"
+for i in *_R1_* ; do
+    echo "${i/_R1_001.fastq.gz},$PWD/$i,forward"
+done >> "$OUTPUT_DIR/manifest.csv"
 
-echo "sample-id,absolute-filepath,direction" > ../bioinfo/manifest.csv
-for i in *_R1_* ; do echo "${i/_R1_001.fastq.gz},$PWD/$i,forward"; done >> ../bioinfo/manifest.csv
-for i in *_R2_* ; do echo "${i/_R2_001.fastq.gz},$PWD/$i,reverse"; done >> ../bioinfo/manifest.csv
+for i in *_R2_* ; do
+    echo "${i/_R2_001.fastq.gz},$PWD/$i,reverse"
+done >> "$OUTPUT_DIR/manifest.csv"
 
-# echo "sample-id,absolute-filepath,direction" > manifest.csv: Creates a CSV file (manifest.csv) with a header line that includes the columns sample-id, absolute-filepath, and direction.
-# for i in *_R1_*; do ... done >> manifest.csv: Loops through all files that contain _R1_ (forward reads) in their names, extracts the sample ID by removing _R1_001.fastq.gz, and appends the line with sample ID, file path, and direction (forward) to the manifest.csv.
-# for i in *_R2_*; do ... done >> manifest.csv: Loops through all files that contain _R2_ (reverse reads) and appends the sample ID, file path, and direction (reverse) to the manifest.csv.
-
-# Importing Data into QIIME 2
-
+# Step 2: Import Data into QIIME 2
+echo "Importing data into QIIME 2..."
 qiime tools import \
   --type 'SampleData[PairedEndSequencesWithQuality]' \
-  --input-path manifest.csv \
-  --output-path paired-end-demux.qza \
+  --input-path "$OUTPUT_DIR/manifest.csv" \
+  --output-path "$OUTPUT_DIR/paired-end-demux.qza" \
   --input-format PairedEndFastqManifestPhred33
 
-# qiime tools import: Imports the paired-end sequence data described in manifest.csv into a QIIME 2 artifact (paired-end-demux.qza), specifying that the data is paired-end sequences with quality scores.
-
-5.	Checking the Quality of the Sequencing Run
-
-##checking the quality of run 
+# Step 3: Check Quality of Sequencing Run
+echo "Checking quality of the sequencing run..."
 qiime demux summarize \
-  --i-data paired-end-demux.qza \
-  --o-visualization paired-end-demux.qzv
+  --i-data "$OUTPUT_DIR/paired-end-demux.qza" \
+  --o-visualization "$OUTPUT_DIR/paired-end-demux.qzv"
 
-•	qiime demux summarize: Generates a summary visualization of the demultiplexed data (paired-end-demux.qza) and saves it as paired-end-demux.qzv.
+echo "Quality check completed. Please visualize the file 'paired-end-demux.qzv' using QIIME2 View."
+echo "Once you determine the trimming and truncation parameters, edit the next section accordingly."
 
+# Placeholder for user to adjust trimming and truncation parameters
+read -p "Press Enter to continue once you've determined the trimming/truncation values..."
 
+# Example trimming and truncation values to be edited by user
+TRIM_LEFT=26
+TRUNC_LEN_F=230
+TRUNC_LEN_R=210
+THREADS=8
 
+# Step 4: Denoising with DADA2
+echo "Starting DADA2 denoising with parameters:"
+echo "  Trim left: $TRIM_LEFT"
+echo "  Trunc length forward: $TRUNC_LEN_F"
+echo "  Trunc length reverse: $TRUNC_LEN_R"
+echo "  Threads: $THREADS"
 
-
-
-
-
-6.	Denoising with DADA2
-
-###joining pairends
 qiime dada2 denoise-paired \
-  --i-demultiplexed-seqs paired-end-demux.qza \
-  --p-trim-left-f 26\
-  --p-trim-left-r 26 \
-  --p-trunc-len-f 230 \
-  --p-trunc-len-r 210 \
-  --p-n-threads 40 \
-  --o-table COI-table.qza \
-  --o-representative-sequences COI-rep-seqs.qza \
-  --o-denoising-stats COI-denoising-stats.qza \
+  --i-demultiplexed-seqs "$OUTPUT_DIR/paired-end-demux.qza" \
+  --p-trim-left-f "$TRIM_LEFT" \
+  --p-trim-left-r "$TRIM_LEFT" \
+  --p-trunc-len-f "$TRUNC_LEN_F" \
+  --p-trunc-len-r "$TRUNC_LEN_R" \
+  --p-n-threads "$THREADS" \
+  --o-table "$OUTPUT_DIR/COI-table.qza" \
+  --o-representative-sequences "$OUTPUT_DIR/COI-rep-seqs.qza" \
+  --o-denoising-stats "$OUTPUT_DIR/COI-denoising-stats.qza" \
   --verbose
 
-•	qiime dada2 denoise-paired: Denoises the paired-end sequences using DADA2, trimming and truncating sequences as specified by the parameters. It outputs:
-•	COI-table.qza: Feature table of observed features.
-•	COI-rep-seqs.qza: Representative sequences.
-•	COI-denoising-stats.qza: Denoising statistics.
+echo "DADA2 denoising completed."
+echo "Outputs:"
+echo "  Feature table: $OUTPUT_DIR/COI-table.qza"
+echo "  Representative sequences: $OUTPUT_DIR/COI-rep-seqs.qza"
+echo "  Denoising stats: $OUTPUT_DIR/COI-denoising-stats.qza"
 
-7.	Visualizing Denoising Stats
+echo "Denoising part completed successfully."
+
+# Step 5: Visualizing Denoising Stats and Representative Sequences
+echo "Visualizing denoising stats and representative sequences..."
 
 qiime metadata tabulate \
-  --m-input-file COI-denoising-stats.qza \
-  --o-visualization COI-denoising-stats.qzv
+  --m-input-file "$OUTPUT_DIR/COI-denoising-stats.qza" \
+  --o-visualization "$OUTPUT_DIR/COI-denoising-stats.qzv" \
+  --verbose
 
 qiime feature-table tabulate-seqs \
-  --i-data COI-rep-seqs.qza \
-  --o-visualization COI-rep-seqs.qzv
+  --i-data "$OUTPUT_DIR/COI-rep-seqs.qza" \
+  --o-visualization "$OUTPUT_DIR/COI-rep-seqs.qzv" \
+  --verbose
 
-•	qiime metadata tabulate: Converts the denoising stats to a visualization (COI-denoising-stats.qzv).
-•	qiime feature-table tabulate-seqs: Converts the representative sequences to a visualization (COI-rep-seqs.qzv).
+#qiime metadata tabulate: Converts the denoising stats to a visualization (COI-denoising-stats.qzv).
+#qiime feature-table tabulate-seqs: Converts the representative sequences to a visualization (COI-rep-seqs.qzv).
 
 8.	Start a screen session to have a command working in background
 
