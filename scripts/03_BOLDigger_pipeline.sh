@@ -10,6 +10,21 @@ LOG_FILE="boldigger_pipeline.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "Starting BOLDigger pipeline..."
+echo "Activating boldigger3-env environment..."
+
+# Ensure Conda is set up for this script
+if [ -f "$(conda info --base)/etc/profile.d/conda.sh" ]; then
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+else
+    echo "Error: Conda setup file not found. Ensure Conda is properly installed."
+    exit 1
+fi
+
+conda activate boldigger3-env
+echo "Environment activated: boldigger3-env"
+
+
+echo "Starting BOLDigger pipeline..."
 
 # Define paths
 FASTA_FILE="/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/exported-rep-seqs/dna-sequences-validated.fasta"
@@ -24,15 +39,23 @@ conda activate boldigger3-env
 
 # Run BOLDigger3
 echo "Running BOLDigger3 identification..."
+
+# Run BOLDigger3
+echo "Running BOLDigger3 identification..."
+
+# Define parameters
 DB=1  # Database: ANIMAL LIBRARY (PUBLIC)
 MODE=2  # Operating mode: Genus and Species Search
-THRESHOLDS="99 97 90 85"  # Thresholds for species, genus, family, order
+THRESHOLDS="98 95 90 85"  # Thresholds for species, genus, family, order
+FASTA_FILE="/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/exported-rep-seqs/dna-sequences-validated.fasta"
 
+# Run the identification process
 boldigger3 identify \
+  "$FASTA_FILE" \
   --db "$DB" \
   --mode "$MODE" \
-  --thresholds $THRESHOLDS \
-  "$FASTA_FILE"
+  --thresholds $THRESHOLDS
+
 
 # Move results to output directory
 echo "Exporting BOLDigger3 results..."
