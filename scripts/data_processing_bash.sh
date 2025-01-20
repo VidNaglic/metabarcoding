@@ -111,14 +111,13 @@ qiime feature-table tabulate-seqs \
 #qiime metadata tabulate: Converts the denoising stats to a visualization (COI-denoising-stats.qzv).
 #qiime feature-table tabulate-seqs: Converts the representative sequences to a visualization (COI-rep-seqs.qzv).
 
+#Here we come to the part of the process which will take longer time to compute. For that reason we can write a "screen" command and have the task running in background.
+#If we are using the Elixir server to run the task we have to use SLURM (https://slurm.schedmd.com/)
+
 8.	Start a screen session to have a command working in background
 
 Screen
 
-9.	 Open qiime and activate it
-
-open qiime 
-conda activate qiime2-2023.5
 
 10.	Assigning Taxonomy
 
