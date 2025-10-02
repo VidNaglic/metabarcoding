@@ -1,2 +1,48 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs and checkpoints
+*.log
+*.tmp
+*.bak
+
+# Large bioinformatics artifacts (never commit)
 data/
-environment/
+databases/
+scripts/filt_check/
+*.fastq.gz
+*.fasta
+*.fa
+*.fna
+*.fq
+*.qza
+*.qzv
+*.biom
+*.parquet*
+
+# QIIME/BOLDigger exports placed in canonical locations
+exported/
+exported-filtered/
+exported-rep-seqs/
+run_*/
+
+# Env and credentials
+.env
+env/
+venv/
+*.env
+scripts/key_file
+
+# Excel outputs (often huge); keep raw small CSVs in scripts/
+*.xlsx
+!TraitDatabase/scripts/*.csv
+

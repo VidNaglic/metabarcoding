@@ -1,189 +1,246 @@
-#!/bin/bash
-# This is a metabarcoding data processing script
+#!/usr/bin/env bash
+# NextSeq-aware metabarcoding pipeline for QIIME 2 (Casava import; no manifest)
+# Publishes canonical outputs so your later scripts run unchanged.
 
-# Enable strict error handling
 set -euo pipefail
+set -o errtrace
+trap 'echo "❌ Failure at: $BASH_COMMAND (line $LINENO)" >&2' ERR
 
-# Log file for capturing output and errors
-LOG_FILE="processing.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+# ── USER TUNABLES (safe defaults for NextSeq 2×150 + Leray) ─────────────
+TRUNC_LEN_R1="${TRUNC_LEN_R1:-145}"
+MAX_EE_R1="${MAX_EE_R1:-2}"
+PRIMER_F="${PRIMER_F:-GGWACWGGWTGAACWGTWTAYCCYCC}"   # mlCOIintF
+PRIMER_R="${PRIMER_R:-TAIACYTCIGGRTGICCRAARAAYCA}"   # jgHCO2198
+CUTADAPT_ERROR_RATE="${CUTADAPT_ERROR_RATE:-0.1}"
+CUTADAPT_MIN_OVERLAP="${CUTADAPT_MIN_OVERLAP:-10}"
 
-# Setup directories - you need a directory where you have your fastq files and a directory where output will be generated
-DATA_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/fastq"
-OUTPUT_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo"
-SCRIPT_DIR="$(dirname "$0")"
+# ── CONFIG (your originals) ─────────────────────────────────────────────
+DATA_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/fastq"
+BIOINFO_ROOT="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo"
 
-# Ensure output directory exists
-mkdir -p "$OUTPUT_DIR"
+RUNSTAMP="$(date +%Y%m%d_%H%M%S)"
+OUT_DIR="${BIOINFO_ROOT}/run_${RUNSTAMP}"
+EXPORT_DIR="${OUT_DIR}/exported"
+LOG="${OUT_DIR}/nextseq_processing.log"
 
-echo "Starting metabarcoding data processing..."
-echo "Working directory: $DATA_DIR"
-echo "Output directory: $OUTPUT_DIR"
+# Canonical targets for downstream scripts:
+CANON_EXPORT_FILTERED="${BIOINFO_ROOT}/exported-filtered"     # dna-sequences-validated.fasta (+ boldigger3_data)
+CANON_EXPORT_REP="${BIOINFO_ROOT}/exported-rep-seqs"          # merged BOLD results later
+CANON_BIOINFO_FILES="${BIOINFO_ROOT}"                         # COI-table.qza, feature-table.biom/tsv
 
-# Change to data directory
-cd "$DATA_DIR"
+mkdir -p "$OUT_DIR" "$EXPORT_DIR" "$CANON_EXPORT_FILTERED" "$CANON_EXPORT_REP" "$CANON_BIOINFO_FILES"
 
-# List all FASTQ files and count them
-echo "Counting FASTQ files..."
-ls *.fastq.gz | wc -l
+# ── ENV / PRECHECKS ─────────────────────────────────────────────────────
+echo "🌱 Preparing environment…"
+if ! command -v qiime >/dev/null 2>&1; then
+  if command -v conda >/dev/null 2>&1; then
+    eval "$(conda shell.bash hook)"
+    conda activate qiime2-2023.5 || { echo "❌ Activate qiime2-2023.5 first"; exit 1; }
+  else
+    echo "❌ QIIME 2 not found and conda not available."; exit 1
+  fi
+fi
+command -v biom >/dev/null 2>&1 || echo "ℹ️  'biom' not on PATH (export still tries)."
+command -v seqkit >/dev/null 2>&1 || echo "ℹ️  'seqkit' not on PATH (rep-seq filtering will be a plain copy)."
 
-# Activate QIIME2 environment
-echo "Activating QIIME2 environment..."
-conda activate qiime2-2023.5
+# Log everything
+exec > >(tee -a "$LOG") 2>&1
+echo "🏁 Run: $RUNSTAMP"
+echo "📁 FASTQs:   $DATA_DIR"
+echo "📁 OUT_DIR:  $OUT_DIR"
+echo "📁 EXPORT:   $EXPORT_DIR"
+echo "🧪 DADA2 single-end R1 with trunc-len=${TRUNC_LEN_R1}, maxEE=${MAX_EE_R1}"
+echo
 
-# Step 1: Create Manifest File
-echo "Creating manifest file..."
-echo "sample-id,absolute-filepath,direction" > "$OUTPUT_DIR/manifest.csv"
-for i in *_R1_* ; do
-    echo "${i/_R1_001.fastq.gz},$PWD/$i,forward"
-done >> "$OUTPUT_DIR/manifest.csv"
+# ── 0) VERIFY FILES & PAIRS ────────────────────────────────────────────
+echo "📄 Listing FASTQs:"
+shopt -s nullglob
+r1s=( "$DATA_DIR"/*_R1_001.fastq.gz )
+r2s=( "$DATA_DIR"/*_R2_001.fastq.gz )
+(( ${#r1s[@]} > 0 )) || { echo "❌ No R1 files found in $DATA_DIR"; exit 1; }
+(( ${#r2s[@]} > 0 )) || { echo "❌ No R2 files found in $DATA_DIR"; exit 1; }
 
-for i in *_R2_* ; do
-    echo "${i/_R2_001.fastq.gz},$PWD/$i,reverse"
-done >> "$OUTPUT_DIR/manifest.csv"
+missing=0
+for r1 in "${r1s[@]}"; do
+  r2="${r1/_R1_/_R2_}"
+  [[ -f "$r2" ]] || { echo "⚠️  Missing R2 for: $r1"; missing=1; }
+done
+(( missing == 0 )) || { echo "❌ Fix missing pairs and re-run."; exit 1; }
+echo "📊 R1 count: ${#r1s[@]} | R2 count: ${#r2s[@]} (pairs OK)"
 
-# Step 2: Import Data into QIIME 2
-echo "Importing data into QIIME 2..."
-qiime tools import \
-  --type 'SampleData[PairedEndSequencesWithQuality]' \
-  --input-path "$OUTPUT_DIR/manifest.csv" \
-  --output-path "$OUTPUT_DIR/paired-end-demux.qza" \
-  --input-format PairedEndFastqManifestPhred33
+# ── 1) IMPORT WITH CASAVA FORMAT (no manifest) ─────────────────────────
+if [[ ! -f "$OUT_DIR/paired-end-demux.qza" ]]; then
+  echo "📥 Importing reads via CasavaOneEightSingleLanePerSampleDirFmt…"
+  echo "ℹ️  Casava sets sample IDs to the text before '_S…' (e.g., KIS0001)"
+  qiime tools import \
+    --type 'SampleData[PairedEndSequencesWithQuality]' \
+    --input-path "$DATA_DIR" \
+    --input-format CasavaOneEightSingleLanePerSampleDirFmt \
+    --output-path "$OUT_DIR/paired-end-demux.qza"
+else
+  echo "⏩ Skipping import (found paired-end-demux.qza)"
+fi
 
-# Step 3: Check Quality of Sequencing Run
-echo "Checking quality of the sequencing run..."
-qiime demux summarize \
-  --i-data "$OUTPUT_DIR/paired-end-demux.qza" \
-  --o-visualization "$OUTPUT_DIR/paired-end-demux.qzv"
+# ── 2) DEMUX SUMMARY (QZV) ─────────────────────────────────────────────
+if [[ ! -f "$OUT_DIR/paired-end-demux.qzv" ]]; then
+  echo "📊 Generating demux summary (QZV)…"
+  qiime demux summarize \
+    --i-data "$OUT_DIR/paired-end-demux.qza" \
+    --o-visualization "$OUT_DIR/paired-end-demux.qzv"
+  echo "🔗 View: $OUT_DIR/paired-end-demux.qzv (https://view.qiime2.org)"
+else
+  echo "⏩ Skipping demux summary (found paired-end-demux.qzv)"
+fi
 
-echo "Quality check completed. Please visualize the file 'paired-end-demux.qzv' using QIIME2 View."
-echo "Once you determine the trimming and truncation parameters, edit the next section accordingly."
+# ── 3) PRIMER/ADAPTER REMOVAL (Cutadapt, paired) ───────────────────────
+if [[ ! -f "$OUT_DIR/trimmed-paired.qza" ]]; then
+  echo "✂️  Removing Leray primers with cutadapt (paired)…"
+  qiime cutadapt trim-paired \
+    --i-demultiplexed-sequences "$OUT_DIR/paired-end-demux.qza" \
+    --p-front-f "$PRIMER_F" \
+    --p-front-r "$PRIMER_R" \
+    --p-error-rate "$CUTADAPT_ERROR_RATE" \
+    --p-overlap "$CUTADAPT_MIN_OVERLAP" \
+    --p-match-read-wildcards \
+    --o-trimmed-sequences "$OUT_DIR/trimmed-paired.qza" \
+    --verbose
+else
+  echo "⏩ Skipping cutadapt (found trimmed-paired.qza)"
+fi
 
-# Placeholder for user to adjust trimming and truncation parameters
-read -p "Press Enter to continue once you've determined the trimming/truncation values..."
+# Optional summary after trimming
+if [[ ! -f "$OUT_DIR/trimmed-paired.qzv" ]]; then
+  qiime demux summarize \
+    --i-data "$OUT_DIR/trimmed-paired.qza" \
+    --o-visualization "$OUT_DIR/trimmed-paired.qzv" || true
+fi
 
-# Example trimming and truncation values to be edited by user
-TRIM_LEFT=26
-TRUNC_LEN_F=230
-TRUNC_LEN_R=210
-THREADS=8
+# ── 4) EXPORT TRIMMED READS, DROP R2 & QIIME FILES, RE-IMPORT R1 ───────
+TRIM_EXPORT="$OUT_DIR/trimmed-export"
+if [[ ! -f "$OUT_DIR/trimmed-R1.qza" ]]; then
+  echo "📤 Exporting trimmed reads and keeping R1 only…"
+  mkdir -p "$TRIM_EXPORT"
+  if [[ -z "$(ls -A "$TRIM_EXPORT" 2>/dev/null)" ]]; then
+    qiime tools export --input-path "$OUT_DIR/trimmed-paired.qza" --output-path "$TRIM_EXPORT"
+  else
+    echo "⏩ Export dir not empty; using existing files."
+  fi
+  # Remove R2 fastqs, MANIFEST, metadata.yml so Casava importer accepts the dir
+  find "$TRIM_EXPORT" -type f -name "*_R2_001.fastq.gz" -delete
+  rm -f "$TRIM_EXPORT/MANIFEST" "$TRIM_EXPORT/metadata.yml" || true
 
-# Step 4: Denoising with DADA2
-echo "Starting DADA2 denoising with parameters:"
-echo "  Trim left: $TRIM_LEFT"
-echo "  Trunc length forward: $TRUNC_LEN_F"
-echo "  Trunc length reverse: $TRUNC_LEN_R"
-echo "  Threads: $THREADS"
+  echo "📥 Re-importing R1 as single-end (Casava)…"
+  qiime tools import \
+    --type 'SampleData[SequencesWithQuality]' \
+    --input-path "$TRIM_EXPORT" \
+    --input-format CasavaOneEightSingleLanePerSampleDirFmt \
+    --output-path "$OUT_DIR/trimmed-R1.qza"
+else
+  echo "⏩ Skipping re-import (found trimmed-R1.qza)"
+fi
 
-qiime dada2 denoise-paired \
-  --i-demultiplexed-seqs "$OUTPUT_DIR/paired-end-demux.qza" \
-  --p-trim-left-f "$TRIM_LEFT" \
-  --p-trim-left-r "$TRIM_LEFT" \
-  --p-trunc-len-f "$TRUNC_LEN_F" \
-  --p-trunc-len-r "$TRUNC_LEN_R" \
-  --p-n-threads "$THREADS" \
-  --o-table "$OUTPUT_DIR/COI-table.qza" \
-  --o-representative-sequences "$OUTPUT_DIR/COI-rep-seqs.qza" \
-  --o-denoising-stats "$OUTPUT_DIR/COI-denoising-stats.qza" \
-  --verbose
+# Optional QZV for R1-only
+if [[ ! -f "$OUT_DIR/trimmed-R1.qzv" ]]; then
+  qiime demux summarize \
+    --i-data "$OUT_DIR/trimmed-R1.qza" \
+    --o-visualization "$OUT_DIR/trimmed-R1.qzv" || true
+fi
 
-echo "DADA2 denoising completed."
-echo "Outputs:"
-echo "  Feature table: $OUTPUT_DIR/COI-table.qza"
-echo "  Representative sequences: $OUTPUT_DIR/COI-rep-seqs.qza"
-echo "  Denoising stats: $OUTPUT_DIR/COI-denoising-stats.qza"
+# ── 5) DADA2 DENOISE-SINGLE (R1 only) ──────────────────────────────────
+if [[ ! -f "$OUT_DIR/COI-table.qza" || ! -f "$OUT_DIR/COI-rep-seqs.qza" ]]; then
+  echo "⚙️  Running DADA2 denoise-single on R1…"
+  qiime dada2 denoise-single \
+    --i-demultiplexed-seqs "$OUT_DIR/trimmed-R1.qza" \
+    --p-trim-left 0 \
+    --p-trunc-len "$TRUNC_LEN_R1" \
+    --p-max-ee "$MAX_EE_R1" \
+    --p-n-threads 1 \
+    --o-table "$OUT_DIR/COI-table.qza" \
+    --o-representative-sequences "$OUT_DIR/COI-rep-seqs.qza" \
+    --o-denoising-stats "$OUT_DIR/COI-denoising-stats.qza" \
+    --verbose
+else
+  echo "⏩ Skipping DADA2 (found COI-table/rep-seqs)"
+fi
 
-echo "Denoising part completed successfully."
+# ── 6) VISUALIZE DADA2 OUTPUTS ─────────────────────────────────────────
+if [[ ! -f "$OUT_DIR/COI-denoising-stats.qzv" ]]; then
+  echo "📈 Making QZVs (denoise stats, rep seqs)…"
+  qiime metadata tabulate \
+    --m-input-file "$OUT_DIR/COI-denoising-stats.qza" \
+    --o-visualization "$OUT_DIR/COI-denoising-stats.qzv"
+  qiime feature-table tabulate-seqs \
+    --i-data "$OUT_DIR/COI-rep-seqs.qza" \
+    --o-visualization "$OUT_DIR/COI-rep-seqs.qzv"
+else
+  echo "⏩ Skipping QZVs (found COI-denoising-stats.qzv / COI-rep-seqs.qzv)"
+fi
 
-# Step 5: Visualizing Denoising Stats and Representative Sequences
-echo "Visualizing denoising stats and representative sequences..."
+echo "🔗 View stats: $OUT_DIR/COI-denoising-stats.qzv"
+echo "🔗 View reps:  $OUT_DIR/COI-rep-seqs.qzv"
 
-qiime metadata tabulate \
-  --m-input-file "$OUTPUT_DIR/COI-denoising-stats.qza" \
-  --o-visualization "$OUTPUT_DIR/COI-denoising-stats.qzv" \
-  --verbose
+# ── 7) EXPORTS ──────────────────────────────────────────────────────────
+if [[ ! -f "$EXPORT_DIR/feature-table.biom" || ! -f "$EXPORT_DIR/dna-sequences.fasta" ]]; then
+  echo "📤 Exporting feature-table and rep-seqs…"
+  qiime tools export --input-path "$OUT_DIR/COI-table.qza"    --output-path "$EXPORT_DIR"
+  qiime tools export --input-path "$OUT_DIR/COI-rep-seqs.qza" --output-path "$EXPORT_DIR"
+else
+  echo "⏩ Skipping export (found BIOM/FASTA in $EXPORT_DIR)"
+fi
 
-qiime feature-table tabulate-seqs \
-  --i-data "$OUTPUT_DIR/COI-rep-seqs.qza" \
-  --o-visualization "$OUTPUT_DIR/COI-rep-seqs.qzv" \
-  --verbose
+# ── 8) BIOM → TSV + ID LIST ────────────────────────────────────────────
+if [[ ! -f "$EXPORT_DIR/feature-table.tsv" ]]; then
+  echo "🛠 Converting BIOM → TSV…"
+  if [[ -f "$EXPORT_DIR/feature-table.biom" ]]; then
+    biom convert -i "$EXPORT_DIR/feature-table.biom" -o "$EXPORT_DIR/feature-table.tsv" --to-tsv --table-type="OTU table"
+  else
+    echo "❌ $EXPORT_DIR/feature-table.biom not found"; exit 1
+  fi
+else
+  echo "⏩ Skipping biom→tsv (found feature-table.tsv)"
+fi
+[[ -s "$EXPORT_DIR/feature-table.tsv" ]] || { echo "❌ feature-table.tsv is empty or missing"; exit 1; }
 
-#qiime metadata tabulate: Converts the denoising stats to a visualization (COI-denoising-stats.qzv).
-#qiime feature-table tabulate-seqs: Converts the representative sequences to a visualization (COI-rep-seqs.qzv).
+if [[ ! -f "$EXPORT_DIR/filtered-otu-ids.txt" ]]; then
+  echo "🔎 Extracting OTU IDs…"
+  cut -f1 "$EXPORT_DIR/feature-table.tsv" | tail -n +2 > "$EXPORT_DIR/filtered-otu-ids.txt"
+else
+  echo "⏩ Skipping ID list (found filtered-otu-ids.txt)"
+fi
 
-#Here we come to the part of the process which will take longer time to compute. For that reason we can write a "screen" command and have the task running in background.
-#If we are using the Elixir server to run the task we have to use SLURM (https://slurm.schedmd.com/)
+# ── 9) FILTER REP SEQS BY VALID IDs ────────────────────────────────────
+if [[ -f "$EXPORT_DIR/dna-sequences.fasta" && ! -f "$EXPORT_DIR/dna-sequences-validated.fasta" ]]; then
+  echo "🔬 Filtering rep sequences by valid OTUs…"
+  mv "$EXPORT_DIR/dna-sequences.fasta" "$EXPORT_DIR/dna-sequences-all.fasta"
+  if command -v seqkit >/dev/null 2>&1; then
+    seqkit grep -f "$EXPORT_DIR/filtered-otu-ids.txt" "$EXPORT_DIR/dna-sequences-all.fasta" > "$EXPORT_DIR/dna-sequences-validated.fasta"
+  else
+    echo "⚠️  seqkit not found — copying all sequences as validated (no filtering)."
+    cp -f "$EXPORT_DIR/dna-sequences-all.fasta" "$EXPORT_DIR/dna-sequences-validated.fasta"
+  fi
+else
+  echo "⏩ Skipping rep-seq filter (validated.fasta exists or input missing)"
+fi
 
-8.	Start a screen session to have a command working in background
+# ── 10) PUBLISH CANONICAL OUTPUTS (for your later scripts) ─────────────
+echo "📦 Publishing canonical outputs…"
 
-Screen
+# a) FASTA for BOLDigger + place for boldigger3_data
+cp -f "$EXPORT_DIR/dna-sequences-validated.fasta"  "${CANON_EXPORT_FILTERED}/dna-sequences-validated.fasta"
+# optional: keep copies of helpful files next to it
+cp -f "$EXPORT_DIR/dna-sequences-all.fasta"        "${CANON_EXPORT_FILTERED}/dna-sequences-all.fasta" || true
+cp -f "$EXPORT_DIR/filtered-otu-ids.txt"           "${CANON_EXPORT_FILTERED}/filtered-otu-ids.txt"    || true
 
+# b) QIIME table files to BIOINFO_ROOT for your merge script
+cp -f "$OUT_DIR/COI-table.qza"                     "${CANON_BIOINFO_FILES}/COI-table.qza"
+cp -f "$EXPORT_DIR/feature-table.biom"             "${CANON_BIOINFO_FILES}/feature-table.biom"
+cp -f "$EXPORT_DIR/feature-table.tsv"              "${CANON_BIOINFO_FILES}/feature-table.tsv"
 
-10.	Assigning Taxonomy
-
-##Asssinging the taxonomy
-##withoug training the database 
-qiime feature-classifier classify-consensus-vsearch \
-  --i-query COI-rep-seqs.qza \
-  --i-reference-reads /Databases/DataBase_Amplicon/MIDORI260/MIDORI2_LONGEST_NUC_GB260_CO1_QIIME_Seq.qza  \
-  --i-reference-taxonomy /Databases/DataBase_Amplicon/MIDORI260/MIDORI2_LONGEST_NUC_GB260_CO1_QIIME_taxa.qza \
-  --p-threads 50 \
-  --o-classification COI-rep-seqs-vsearch_taxonomy_midori260.qza \
-  --output-dir ./vsearch2  \
-  --verbose 
-
-##without training the database 
-qiime feature-classifier classify-consensus-vsearch \
-  --i-query COI-rep-seqs.qza \
-  --i-reference-reads /data/rusa/DataBase/COI_2020/bold_derep1_seqs.qza  \
-  --i-reference-taxonomy /data/rusa/DataBase/COI_2020/bold_derep1_taxa.qza \
-  --p-threads 20 \
-  --o-classification COI-rep-seqs-vsearch_taxonomy_bold.qza \
-  --verbose 
-##
-
-11.	Detach the screen to run in background
-
-#detaching the screen option 
-Ctrl-a and then d
-
-12.	Visualizing Taxonomy Output
-
-##visualizing taxonomy output
-qiime metadata tabulate \
-  --m-input-file COI-rep-seqs-vsearch_taxonomy_midori260.qza \
-  --o-visualization COI-rep-seqs-taxonomy_midori260.qzv
-
-•	qiime metadata tabulate: Converts the taxonomy classification results to a visualization (COI-rep-seqs-taxonomy_midori260.qzv).
-
-13.	Exporting Data for Analysis in R
-
-##exporting data into R for plyseq
-#table of otus
-qiime tools export \
-  --input-path  COI-table.qza \
-  --output-path Dada2_midori260-output
-  
-#convert otus to text format
-biom convert -i Dada2_midori260-output/feature-table.biom -o Dada2_midori260-output/otu_table.txt --to-tsv
-
-# table of taxonomy
-qiime tools export \
-  --input-path COI-rep-seqs-vsearch_taxonomy_midori260.qza \
-  --output-path Dada2_midori260-output
-
-##using the recent bold database
-qiime tools export \
-  --input-path COI-rep-seqs-vsearch_taxonomy_bold.qza \
-  --output-path Dada2-output
-
-# sequences
-qiime tools export \
-  --input-path COI-rep-seqs.qza  \
-  --output-path Dada2_midori260-output
-#
-biom summarize-table -i Dada2_midori260-output/feature-table.biom > Dada2_midori260-output/otu_summary.txt
-
-•	qiime tools export: Exports the feature table, taxonomy classifications, and representative sequences to a directory (Dada2_midori260-output).
-•	biom convert: Converts the feature table from .biom format to a text format (otu_table.txt) for further analysis in R.
-•	biom summarize-table: Summarizes the feature table and outputs the summary to otu_summary.txt.
+echo
+echo "✅ Done."
+echo "📂 Run folder: $OUT_DIR"
+echo "📝 Log:        $LOG"
+echo "📦 Canonical:  ${CANON_EXPORT_FILTERED}  (FASTA for BOLDigger)"
+echo "📦 Canonical:  ${CANON_BIOINFO_FILES}   (COI-table.qza + feature-table.*)"
+echo "🔗 QZVs:       paired-end-demux.qzv, trimmed-paired.qzv, trimmed-R1.qzv, COI-denoising-stats.qzv, COI-rep-seqs.qzv"
+echo "🧪 Params:     TRUNC_LEN_R1=${TRUNC_LEN_R1}  MAX_EE_R1=${MAX_EE_R1}  Cutadapt err=${CUTADAPT_ERROR_RATE}, ovlp=${CUTADAPT_MIN_OVERLAP}"
