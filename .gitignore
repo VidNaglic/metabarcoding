@@ -1,6 +1,8 @@
 # OS / editor
 .DS_Store
 Thumbs.db
+.ini
+desktop.ini
 .vscode/
 .idea/
 
@@ -45,4 +47,3 @@ scripts/key_file
 # Excel outputs (often huge); keep raw small CSVs in scripts/
 *.xlsx
 !TraitDatabase/scripts/*.csv
-
