@@ -17,6 +17,10 @@ __pycache__/
 *.tmp
 *.bak
 
+# Local environment installers and YAMLs
+environment/
+!environment/README.md
+
 # Large bioinformatics artifacts (never commit)
 data/
 databases/
