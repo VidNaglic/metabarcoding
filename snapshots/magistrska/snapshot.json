@@ -1,81 +1,20 @@
-﻿{
-    "project":  "Magistrska",
-    "created_utc":  "2025-10-02T13:39:23Z",
-    "data_dir":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag",
-    "bioinfo_dir":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo",
-    "latest_run_dir":  null,
-    "logs":  {
-                 "boldigger":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo\\exported-filtered\\boldigger3_data\\boldigger3_chunked.log",
-                 "qiime2":  null
-             },
-    "artifacts":  {
-                      "feature_table_tsv":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo\\feature-table.tsv",
-                      "boldigger_merged_parquet":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo\\exported-filtered\\boldigger3_data\\dna-sequences-validated_identification_result.parquet.snappy",
-                      "rep_seqs_fasta":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo\\exported-filtered\\dna-sequences-validated.fasta",
-                      "feature_table_biom":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo\\feature-table.biom",
-                      "coi_table_qza":  "C:\\Users\\vidna\\Documents\\mtb\\data\\mtb_mag\\bioinfo\\COI-table.qza"
-                  },
-    "versions":  {
-                     "boldigger3":  null,
-                     "qiime2":  null,
-                     "biom":  null
-                 },
-    "boldigger_params":  {
-                             "DB":  3,
-                             "CHUNK_SIZE":  120,
-                             "THRESHOLDS":  [
-                                                97,
-                                                95,
-                                                90,
-                                                85
-                                            ],
-                             "MODE":  3,
-                             "WORKERS":  1
-                         },
-    "scripts_signatures":  [
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\0.01_prepare_fastq_files.sh",
-                                   "sha256":  "BC26F85C7498B9A1EE8BB9498AD1CEF61F4F483E74AAB8EF5D20A9CE759C5ADB"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\01_prepare_qiime2_env.sh",
-                                   "sha256":  "825712FFA936F1BD08073D4C821CF30C39B820585EA682DCC9F59ADE8EA3D3B6"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\02_data_processing.sh",
-                                   "sha256":  "4D0BF874CAA7D5FD0032C823BAF754A60F682557CCE83FF396562FBAE0570CBB"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\03.1_Concetenate_partial_files.py",
-                                   "sha256":  "4FB1A4D52577058F89C516D9EBC0A26060C3039900EC79CE0315AD3450A54860"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\03_BOLDigger_pipeline.sh",
-                                   "sha256":  "9E275B43308070F21CAD48A6E6008FA06C761E63C373AEE06200772E2BB82340"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\04.1_parquet_to_csv.py",
-                                   "sha256":  "D75CE84CDD4F8E13C250151182ECEDFD1116CF6A28B20C39E243C85088E21057"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\04_join_tables.py",
-                                   "sha256":  "8FDCB2CD21D0F4D8E9DC435B1672EFBD8C5808EEE09D55D6170D86A9B2C9747A"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\05_exploratory_analysis_arthropoda.py",
-                                   "sha256":  "E2628A5718ED08BDC119F328DDCEC2730504CBBA840C370C41D7AF10A0D58458"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\06_filter_by.py",
-                                   "sha256":  "8EF3D6F104BACB576D344F8E055BE6B3F8559ED9839F325C190B1D8572E7E3E7"
-                               },
-                               {
-                                   "path":  "C:\\Users\\vidna\\Documents\\mtb\\scripts\\07_basic_analysis.py",
-                                   "sha256":  "377A5B36FF461D466623447315649447361EE1AF31193A29E6422CA0AC2B88C9"
-                               }
-                           ],
-    "repo":  {
-                 "commit":  "9d325e4ecc7cda73ba1d9c88a5a3d859992de132",
-                 "branch":  "main"
-             }
+{
+  "project": "Magistrska",
+  "created_utc": "2025-10-06T09:55:52Z",
+  "data_dir": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag",
+  "bioinfo_dir": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo",
+  "logs": {
+    "qiime2": "",
+    "boldigger": "data/mtb_mag/bioinfo/exported-filtered/boldigger3_data/boldigger3_chunked.log"
+  },
+  "artifacts": {
+    "coi_table_qza": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/COI-table.qza",
+    "feature_table_biom": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/feature-table.biom",
+    "feature_table_tsv": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/feature-table.tsv",
+    "rep_seqs_fasta": "data/mtb_mag/bioinfo/exported-filtered/dna-sequences-validated.fasta",
+    "boldigger_merged_parquet": "data/mtb_mag/bioinfo/exported-filtered/boldigger3_data/dna-sequences-validated_identification_result.parquet.snappy"
+  },
+  "params_from_log": {},
+  "boldigger_params_from_log": {},
+  "boldigger_params_from_script": {}
 }
