@@ -18,10 +18,17 @@ RETRY_INTERVAL=8         # seconds
 WORKERS=1
 
 mkdir -p "${RESULTS_DIR}"
-LOG_FILE="${RESULTS_DIR}/boldigger3_chunked.log"
+# Allow overriding log path via env var BOLDIGGER_LOG (optional)
+if [[ -n "${BOLDIGGER_LOG:-}" ]]; then
+  mkdir -p "$(dirname "$BOLDIGGER_LOG")" 2>/dev/null || true
+  LOG_FILE="$BOLDIGGER_LOG"
+else
+  LOG_FILE="${RESULTS_DIR}/boldigger3_chunked.log"
+fi
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "🧬 BOLDigger3 (chunked, resumable) started at $(date '+%Y-%m-%d %H:%M:%S')"
+echo "📝 Log file: $LOG_FILE"
 [[ -s "$INPUT_FASTA" ]] || { echo "❌ FASTA not found or empty: $INPUT_FASTA"; exit 1; }
 
 # Ensure environment
@@ -33,6 +40,17 @@ if ! command -v boldigger3 >/dev/null 2>&1; then
     echo "❌ 'boldigger3' not on PATH and no conda available."; exit 1
   fi
 fi
+
+# Record tool version and exact parameters for reproducibility
+if command -v boldigger3 >/dev/null 2>&1; then
+  echo "🔢 boldigger3 version: $(boldigger3 --version 2>/dev/null | head -n1)"
+fi
+if [[ ${#THRESHOLDS[@]:-} -gt 0 ]]; then
+  _thstr=$(printf "%s," "${THRESHOLDS[@]}"); _thstr="${_thstr%,}"
+else
+  _thstr=""
+fi
+echo "🧪 Params:     DB=${DB}  MODE=${MODE}  THRESHOLDS=[${_thstr}]  CHUNK_SIZE=${CHUNK_SIZE}  WORKERS=${WORKERS}  MAX_RETRIES=${MAX_RETRIES}  RETRY_INTERVAL=${RETRY_INTERVAL}s"
 
 # Helper: split FASTA into N-record chunks (no external deps)
 split_fasta_by_records() {

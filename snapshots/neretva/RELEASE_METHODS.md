@@ -1,20 +1,14 @@
-Neretva — Bioinformatics Methods Snapshot
+Methods — Neretva (artifacts present; limited logs)
 
-Summary
-- Pipeline executed via numbered scripts (01–04) without modifications.
-- Outputs frozen under project data directories; this repo stores only methods metadata.
+Paired-end Illumina reads were processed in QIIME 2, following standard practice: reads were imported via a manifest and inspected with demux summarize to guide trimming; DADA2 denoise-paired performed filtering, error correction, merging, chimera removal and dereplication to produce ASVs. Per-run parameter details are not available in a dedicated project log for this dataset.
 
-Key Artifacts (paths)
-- QIIME2 table (QZA): C:\Users\vidna\Documents\mtb\data\mtb_neretva\bioinfo\COI-table.qza
-- Feature table (TSV): C:\Users\vidna\Documents\mtb\data\mtb_neretva\bioinfo\feature-table.tsv
-- Rep-seqs (validated FASTA): C:\Users\vidna\Documents\mtb\data\mtb_neretva\bioinfo\exported-filtered\dna-sequences-validated.fasta
-- BOLDigger merged parquet: C:\Users\vidna\Documents\mtb\data\mtb_neretva\bioinfo\exported-filtered\boldigger3_data\dna-sequences-validated_identification_result.parquet.snappy
+Available artifacts
+- QIIME outputs: data/mtb_neretva/bioinfo/COI-table.qza; feature-table.(biom|tsv)
+- Representative sequences and BOLD results: data/mtb_neretva/bioinfo/exported-rep-seqs/
 
-Logs
-- QIIME2 processing log: not captured in latest snapshot (run folder not found)
-- BOLDigger3 log: C:\Users\vidna\Documents\mtb\data\mtb_neretva\bioinfo\exported-filtered\boldigger3_data\boldigger3_chunked.log
+Taxonomic assignment
+- BOLDigger v3 was used to generate merged identification results (Parquet/XLSX present under exported-rep-seqs). Default identity thresholds (97 %, 95 %, 90 %, 85 %) and exhaustive search mode (mode 3; DB 3) are assumed based on current pipeline configuration; no project-local BOLDigger log was found for confirmation.
 
-Notes for Manuscript
-- Refer to the Feature table (TSV) and merged BOLD parquet as the basis for downstream taxonomic summaries and trait joins.
-- If exact trimming/denoising parameters are required, reference the QIIME2 run folder used originally; future runs should preserve the per-run log under bioinfo/run_YYYYMMDD_HHMMSS.
+References
+- Bolyen et al. 2019; Callahan et al. 2016; Buchner & Leese 2020; Buchner & Shah 2025.
 

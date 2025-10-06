@@ -17,3 +17,4 @@ QIIME2 Parameters
 - maxEE R1: 2
 
 BOLDigger Settings
+- Thresholds: 97,95,90,85 (from log)

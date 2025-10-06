@@ -1,20 +1,20 @@
 {
   "project": "Neretva",
-  "created_utc": "2025-10-06T09:55:51Z",
+  "created_utc": "2025-10-06T10:13:42Z",
   "data_dir": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva",
   "bioinfo_dir": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo",
   "logs": {
     "qiime2": "",
-    "boldigger": "data/mtb_neretva/bioinfo/exported-filtered/boldigger3_data/boldigger3_chunked.log"
+    "boldigger": "data/mtb_neretva/bioinfo/exported-rep-seqs/boldigger3_chunked.log"
   },
   "artifacts": {
     "coi_table_qza": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/COI-table.qza",
     "feature_table_biom": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/feature-table.biom",
     "feature_table_tsv": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/feature-table.tsv",
-    "rep_seqs_fasta": "data/mtb_neretva/bioinfo/exported-filtered/dna-sequences-validated.fasta",
-    "boldigger_merged_parquet": "data/mtb_neretva/bioinfo/exported-filtered/boldigger3_data/dna-sequences-validated_identification_result.parquet.snappy"
+    "rep_seqs_fasta": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/exported-rep-seqs/dna-sequences-validated.fasta",
+    "boldigger_merged_parquet": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_neretva/bioinfo/exported-rep-seqs/dna-sequences-validated_identification_result.parquet.snappy"
   },
   "params_from_log": {},
   "boldigger_params_from_log": {},
-  "boldigger_params_from_script": {}
+  "boldigger_params_from_script": {"db": 3                     # 1–8 (3 = animal library public+private),"mode": 3                   # 1=rapid, 2=genus+species, 3=exhaustive,"chunk_size": 120           # 80–150 is typical,"workers": 1,"thresholds": [97,95,90,85]}
 }

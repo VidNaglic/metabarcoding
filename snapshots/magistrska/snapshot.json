@@ -1,20 +1,20 @@
 {
   "project": "Magistrska",
-  "created_utc": "2025-10-06T09:55:52Z",
+  "created_utc": "2025-10-06T10:13:42Z",
   "data_dir": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag",
   "bioinfo_dir": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo",
   "logs": {
     "qiime2": "",
-    "boldigger": "data/mtb_mag/bioinfo/exported-filtered/boldigger3_data/boldigger3_chunked.log"
+    "boldigger": "data/mtb_mag/bioinfo/boldigger3-results/boldigger3_chunked.log"
   },
   "artifacts": {
     "coi_table_qza": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/COI-table.qza",
     "feature_table_biom": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/feature-table.biom",
     "feature_table_tsv": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/feature-table.tsv",
-    "rep_seqs_fasta": "data/mtb_mag/bioinfo/exported-filtered/dna-sequences-validated.fasta",
-    "boldigger_merged_parquet": "data/mtb_mag/bioinfo/exported-filtered/boldigger3_data/dna-sequences-validated_identification_result.parquet.snappy"
+    "rep_seqs_fasta": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/exported-rep-seqs/dna-sequences-validated.fasta",
+    "boldigger_merged_parquet": "/mnt/c/Users/vidna/Documents/mtb/data/mtb_mag/bioinfo/boldigger3-results/dna-sequences-validated_identification_result.parquet.snappy"
   },
-  "params_from_log": {},
+  "params_from_log": {"trunc_len_r1": 230,"trunc_len_r2": 180,"max_ee_r1": 2.0,"max_ee_r2": 2.0,"min_overlap": 12,"trim_left_r1": 20,"trim_left_r2": 20,"threads": 8,"source": "processing.log"},
   "boldigger_params_from_log": {},
-  "boldigger_params_from_script": {}
+  "boldigger_params_from_script": {"db": 3                     # 1–8 (3 = animal library public+private),"mode": 3                   # 1=rapid, 2=genus+species, 3=exhaustive,"chunk_size": 120           # 80–150 is typical,"workers": 1,"thresholds": [97,95,90,85]}
 }

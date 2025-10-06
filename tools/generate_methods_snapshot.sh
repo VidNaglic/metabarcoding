@@ -11,7 +11,19 @@ DATA_DIR="$2"
 
 BIOINFO_DIR="${DATA_DIR}/bioinfo"
 EXPORT_FILTERED="${BIOINFO_DIR}/exported-filtered"
-BOLD_DIR="${EXPORT_FILTERED}/boldigger3_data"
+EXPORT_REP="${BIOINFO_DIR}/exported-rep-seqs"
+
+# Detect BOLD output location per project
+if [[ -d "${EXPORT_FILTERED}/boldigger3_data" ]]; then
+  BOLD_DIR="${EXPORT_FILTERED}/boldigger3_data"
+elif compgen -G "${EXPORT_REP}/dna-sequences-validated_identification_result.parquet.snappy" > /dev/null ||
+     compgen -G "${EXPORT_REP}/dna-sequences-validated_bold_results*.xlsx" > /dev/null; then
+  BOLD_DIR="${EXPORT_REP}"
+elif [[ -d "${BIOINFO_DIR}/boldigger3-results" ]]; then
+  BOLD_DIR="${BIOINFO_DIR}/boldigger3-results"
+else
+  BOLD_DIR="${EXPORT_FILTERED}/boldigger3_data"
+fi
 
 # Find latest QIIME log
 QIIME_LOG=""
@@ -41,6 +53,35 @@ if [[ -n "${QIIME_LOG}" && -f "${QIIME_LOG}" ]]; then
   fi
 fi
 
+# If no dedicated QIIME log found, try to recover params from scripts/processing.log
+if [[ ${#Q[@]} -eq 0 ]]; then
+  PROC_LOG="scripts/processing.log"
+  FASTQ_PATH="$(readlink -f "${DATA_DIR}/fastq" 2>/dev/null || realpath "${DATA_DIR}/fastq" 2>/dev/null || echo "${DATA_DIR}/fastq")"
+  if [[ -f "$PROC_LOG" ]]; then
+    line=$(awk -v target="$FASTQ_PATH" '
+      BEGIN{curr=""}
+      /^(Working directory:|Data Directory:)[[:space:]]*/{
+        # capture path after the label
+        p=$0; sub(/^[^:]*:[[:space:]]*/, "", p); curr=p
+      }
+      /^Command: run_dada\.R /{
+        if (curr==target) print $0
+      }
+    ' "$PROC_LOG" | tail -n1)
+    if [[ -n "$line" ]]; then
+      if [[ "$line" =~ --truncation_length\ ([0-9]+) ]]; then Q[trunc_len_r1]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --truncation_length_reverse\ ([0-9]+) ]]; then Q[trunc_len_r2]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --trim_left\ ([0-9]+) ]]; then Q[trim_left_r1]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --trim_left_reverse\ ([0-9]+) ]]; then Q[trim_left_r2]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --max_expected_errors\ ([0-9.]+) ]]; then Q[max_ee_r1]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --max_expected_errors_reverse\ ([0-9.]+) ]]; then Q[max_ee_r2]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --min_overlap\ ([0-9]+) ]]; then Q[min_overlap]="${BASH_REMATCH[1]}"; fi
+      if [[ "$line" =~ --num_threads\ ([0-9]+) ]]; then Q[threads]="${BASH_REMATCH[1]}"; fi
+      Q[source]="processing.log"
+    fi
+  fi
+fi
+
 # Parse BOLDigger params from log if available
 BOLD_LOG="${BOLD_DIR}/boldigger3_chunked.log"
 declare -A B
@@ -64,6 +105,18 @@ if [[ -f "${BOLD_LOG}" ]]; then
     if [[ "$LAST" =~ --thresholds\ ([0-9\ ]+) ]]; then B[thresholds]="${BASH_REMATCH[1]}"; fi
     if [[ "$LAST" =~ --workers\ ([0-9]+) ]]; then B[workers]="${BASH_REMATCH[1]}"; fi
   fi
+  # Also parse default thresholds lines like: "Species: 97, Genus: 95, Family: 90, Order: 85"
+  if [[ -z "${B[thresholds]:-}" ]]; then
+    if grep -qE 'Species:\s*[0-9]+' <<<"$T"; then
+      mapfile -t _thlines < <(grep -E 'Species:\s*[0-9]+' <<<"$T" | tail -n1)
+      if [[ -n "${_thlines[0]:-}" ]]; then
+        line="${_thlines[0]}"
+        if [[ "$line" =~ Species:\ ([0-9]+),\ Genus:\ ([0-9]+),\ Family:\ ([0-9]+),\ Order:\ ([0-9]+) ]]; then
+          B[thresholds]="${BASH_REMATCH[1]},${BASH_REMATCH[2]},${BASH_REMATCH[3]},${BASH_REMATCH[4]}"
+        fi
+      fi
+    fi
+  fi
 fi
 
 # Fallback to script constants if log had nothing
@@ -71,12 +124,11 @@ declare -A BS
 if [[ ${#B[@]} -eq 0 ]]; then
   SCRIPTP="scripts/03_BOLDigger_pipeline.sh"
   if [[ -f "$SCRIPTP" ]]; then
-    TXT=$(sed -n '1,4000p' "$SCRIPTP")
-    if [[ "$TXT" =~ ^DB=([0-9]+) ]]; then BS[db]="${BASH_REMATCH[1]}"; fi
-    if [[ "$TXT" =~ ^MODE=([0-9]+) ]]; then BS[mode]="${BASH_REMATCH[1]}"; fi
-    if [[ "$TXT" =~ ^THRESHOLDS=\(([^\)]+)\) ]]; then BS[thresholds]="${BASH_REMATCH[1]}"; fi
-    if [[ "$TXT" =~ ^CHUNK_SIZE=([0-9]+) ]]; then BS[chunk_size]="${BASH_REMATCH[1]}"; fi
-    if [[ "$TXT" =~ ^WORKERS=([0-9]+) ]]; then BS[workers]="${BASH_REMATCH[1]}"; fi
+    val=$(grep -m1 -E '^DB=' "$SCRIPTP" | sed -E 's/^DB=//'); [[ -n "$val" ]] && BS[db]="$val"
+    val=$(grep -m1 -E '^MODE=' "$SCRIPTP" | sed -E 's/^MODE=//'); [[ -n "$val" ]] && BS[mode]="$val"
+    val=$(grep -m1 -E '^THRESHOLDS=\(' "$SCRIPTP" | sed -E 's/^THRESHOLDS=\(([^)]*)\).*/\1/'); [[ -n "$val" ]] && BS[thresholds]="$(echo "$val" | sed 's/\s\+/,/g')"
+    val=$(grep -m1 -E '^CHUNK_SIZE=' "$SCRIPTP" | sed -E 's/^CHUNK_SIZE=//'); [[ -n "$val" ]] && BS[chunk_size]="$val"
+    val=$(grep -m1 -E '^WORKERS=' "$SCRIPTP" | sed -E 's/^WORKERS=//'); [[ -n "$val" ]] && BS[workers]="$val"
   fi
 fi
 
@@ -99,20 +151,22 @@ cat >"${SNAP_DIR}/snapshot.json" <<JSON
     "coi_table_qza": "$(readlink -f "$BIOINFO_DIR/COI-table.qza" 2>/dev/null || realpath "$BIOINFO_DIR/COI-table.qza" 2>/dev/null || echo "$BIOINFO_DIR/COI-table.qza")",
     "feature_table_biom": "$(readlink -f "$BIOINFO_DIR/feature-table.biom" 2>/dev/null || realpath "$BIOINFO_DIR/feature-table.biom" 2>/dev/null || echo "$BIOINFO_DIR/feature-table.biom")",
     "feature_table_tsv": "$(readlink -f "$BIOINFO_DIR/feature-table.tsv" 2>/dev/null || realpath "$BIOINFO_DIR/feature-table.tsv" 2>/dev/null || echo "$BIOINFO_DIR/feature-table.tsv")",
-    "rep_seqs_fasta": "$(readlink -f "$EXPORT_FILTERED/dna-sequences-validated.fasta" 2>/dev/null || realpath "$EXPORT_FILTERED/dna-sequences-validated.fasta" 2>/dev/null || echo "$EXPORT_FILTERED/dna-sequences-validated.fasta")",
+    "rep_seqs_fasta": "$(readlink -f "$EXPORT_FILTERED/dna-sequences-validated.fasta" 2>/dev/null || realpath "$EXPORT_FILTERED/dna-sequences-validated.fasta" 2>/dev/null || readlink -f "$EXPORT_REP/dna-sequences-validated.fasta" 2>/dev/null || realpath "$EXPORT_REP/dna-sequences-validated.fasta" 2>/dev/null || echo "$EXPORT_FILTERED/dna-sequences-validated.fasta")",
     "boldigger_merged_parquet": "$(readlink -f "$BOLD_DIR/dna-sequences-validated_identification_result.parquet.snappy" 2>/dev/null || realpath "$BOLD_DIR/dna-sequences-validated_identification_result.parquet.snappy" 2>/dev/null || echo "$BOLD_DIR/dna-sequences-validated_identification_result.parquet.snappy")"
   },
   "params_from_log": $(
     {
       printf '{'
       first=1
-      for k in runstamp fastq_dir out_dir export_dir trunc_len_r1 max_ee_r1 cutadapt_error_rate cutadapt_min_overlap match_wildcards primer_f primer_r trim_left_r1 dada2_mode threads; do
+      for k in runstamp fastq_dir out_dir export_dir trunc_len_r1 trunc_len_r2 max_ee_r1 max_ee_r2 cutadapt_error_rate cutadapt_min_overlap min_overlap match_wildcards primer_f primer_r trim_left_r1 trim_left_r2 dada2_mode threads source; do
         v=${Q[$k]:-}
         [[ -z "$v" ]] && continue
         [[ $first -eq 0 ]] && printf ',' || first=0
         if [[ "$k" =~ ^(trunc_len_r1|max_ee_r1|cutadapt_min_overlap|trim_left_r1|threads|match_wildcards)$ ]]; then
           printf '"%s": %s' "$k" "$v"
         elif [[ "$k" == cutadapt_error_rate ]]; then
+          printf '"%s": %s' "$k" "$v"
+        elif [[ "$k" =~ ^(trunc_len_r2|max_ee_r2|min_overlap|trim_left_r2)$ ]]; then
           printf '"%s": %s' "$k" "$v"
         else
           printf '"%s": "%s"' "$k" "$v"
