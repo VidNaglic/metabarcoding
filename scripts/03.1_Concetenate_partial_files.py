@@ -5,7 +5,7 @@ import sys
 import os
 
 # ─── USER CONFIG ────────────────────────────────────────────────────────────────
-bold_folder = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/exported-filtered/boldigger3_data"
+bold_folder = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/exported-filtered/boldigger3_data"
 
 out_parts_all_xlsx = f"{bold_folder}/dna-sequences-validated_bold_results_all.xlsx"
 out_parts_all_csv  = out_parts_all_xlsx.replace(".xlsx", ".csv")
@@ -13,7 +13,7 @@ out_parts_all_csv  = out_parts_all_xlsx.replace(".xlsx", ".csv")
 parquet_id = f"{bold_folder}/dna-sequences-validated_identification_result.parquet.snappy"
 out_id_xlsx = f"{bold_folder}/dna-sequences-validated_identification_result.xlsx"
 
-out_final_xlsx = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/exported-rep-seqs/dna-sequences-validated_full_results.xlsx"
+out_final_xlsx = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/exported-rep-seqs/dna-sequences-validated_full_results.xlsx"
 out_final_csv  = out_final_xlsx.replace(".xlsx", ".csv")
 # ────────────────────────────────────────────────────────────────────────────────
 

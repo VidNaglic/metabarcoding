@@ -2,8 +2,13 @@
 set -euo pipefail
 
 # 1. Define source & target
-SRC_ROOT="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/GIS_junij2025"
-FASTQ_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/fastq"
+SRC_ROOT="/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/GIS_december2025"
+FASTQ_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/fastq"
+
+if [ ! -d "$SRC_ROOT" ]; then
+  echo "Source folder not found: $SRC_ROOT" >&2
+  exit 1
+fi
 
 # 2. Make sure the target exists (and is empty if you like)
 mkdir -p "$FASTQ_DIR"

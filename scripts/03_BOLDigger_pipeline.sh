@@ -5,8 +5,8 @@ set -o errtrace
 trap 'echo "❌ Failure at: $BASH_COMMAND (line $LINENO)" >&2' ERR
 
 # Inputs from your previous script (canonical paths)
-INPUT_FASTA="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/exported-filtered/dna-sequences-validated.fasta"
-RESULTS_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/exported-filtered/boldigger3_data"
+INPUT_FASTA="/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/exported-filtered/dna-sequences-validated.fasta"
+RESULTS_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/exported-filtered/boldigger3_data"
 
 # BOLDigger3 settings (conservative for RAM)
 DB=3                     # 1–8 (3 = animal library public+private)
@@ -45,7 +45,7 @@ fi
 if command -v boldigger3 >/dev/null 2>&1; then
   echo "🔢 boldigger3 version: $(boldigger3 --version 2>/dev/null | head -n1)"
 fi
-if [[ ${#THRESHOLDS[@]:-} -gt 0 ]]; then
+if [[ ${#THRESHOLDS[@]} -gt 0 ]]; then
   _thstr=$(printf "%s," "${THRESHOLDS[@]}"); _thstr="${_thstr%,}"
 else
   _thstr=""

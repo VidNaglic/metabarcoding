@@ -4,20 +4,20 @@ import subprocess
 import pandas as pd
 
 # ─── USER CONFIG ────────────────────────────────────────────────────────────────
-coi_qza_path      = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/COI-table.qza"
-biom_path         = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/feature-table.biom"
-coi_table_path    = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/feature-table.tsv"
+coi_qza_path      = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/COI-table.qza"
+biom_path         = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/feature-table.biom"
+coi_table_path    = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/feature-table.tsv"
 
 # BOLDigger result: large file → use CSV
 bold_results_xlsx = (
-    "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/"
+    "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/"
     "bioinfo/exported-rep-seqs/"
     "dna-sequences-validated_full_results.xlsx"
 )
 bold_results_csv = bold_results_xlsx.replace(".xlsx", ".csv")
 
-parquet_path      = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/joined_coi_bold_results.parquet"
-excel_path        = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/joined_coi_bold_results.xlsx"
+parquet_path      = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/joined_coi_bold_results.parquet"
+excel_path        = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/joined_coi_bold_results.xlsx"
 # ────────────────────────────────────────────────────────────────────────────────
 
 # 1) Export COI table if needed

@@ -3,8 +3,8 @@ import pyarrow.parquet as pq
 import csv
 
 # ─── CONFIG ─────────────────────────────────────────────────────────
-parquet_path = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/joined_coi_bold_results.parquet"
-csv_path     = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/joined_coi_bold_results.csv"
+parquet_path = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/joined_coi_bold_results.parquet"
+csv_path     = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/joined_coi_bold_results.csv"
 batch_size   = 5_000  # adjust depending on memory
 # ────────────────────────────────────────────────────────────────────
 

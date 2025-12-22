@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
-# NextSeq-aware metabarcoding pipeline for QIIME 2 (Casava import; no manifest)
+# MiSeq-ready metabarcoding pipeline for QIIME 2 (Casava import; no manifest)
 # Publishes canonical outputs so your later scripts run unchanged.
 
 set -euo pipefail
 set -o errtrace
 trap 'echo "❌ Failure at: $BASH_COMMAND (line $LINENO)" >&2' ERR
 
-# ── USER TUNABLES (safe defaults for NextSeq 2×150 + Leray) ─────────────
-TRUNC_LEN_R1="${TRUNC_LEN_R1:-145}"
-MAX_EE_R1="${MAX_EE_R1:-2}"
+# ── USER TUNABLES (safe defaults for MiSeq 2×300 + Leray) ──────────────
+TRUNC_LEN_F="${TRUNC_LEN_F:-270}"
+TRUNC_LEN_R="${TRUNC_LEN_R:-210}"
+TRIM_LEFT_F="${TRIM_LEFT_F:-0}"
+TRIM_LEFT_R="${TRIM_LEFT_R:-0}"
+MAX_EE_F="${MAX_EE_F:-2}"
+MAX_EE_R="${MAX_EE_R:-4}"
 PRIMER_F="${PRIMER_F:-GGWACWGGWTGAACWGTWTAYCCYCC}"   # mlCOIintF
 PRIMER_R="${PRIMER_R:-TAIACYTCIGGRTGICCRAARAAYCA}"   # jgHCO2198
 CUTADAPT_ERROR_RATE="${CUTADAPT_ERROR_RATE:-0.1}"
 CUTADAPT_MIN_OVERLAP="${CUTADAPT_MIN_OVERLAP:-10}"
 
 # ── CONFIG (your originals) ─────────────────────────────────────────────
-DATA_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/fastq"
-BIOINFO_ROOT="/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo"
+DATA_DIR="/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/fastq"
+BIOINFO_ROOT="/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo"
 
 RUNSTAMP="$(date +%Y%m%d_%H%M%S)"
 OUT_DIR="${BIOINFO_ROOT}/run_${RUNSTAMP}"
@@ -49,7 +53,7 @@ echo "🏁 Run: $RUNSTAMP"
 echo "📁 FASTQs:   $DATA_DIR"
 echo "📁 OUT_DIR:  $OUT_DIR"
 echo "📁 EXPORT:   $EXPORT_DIR"
-echo "🧪 DADA2 single-end R1 with trunc-len=${TRUNC_LEN_R1}, maxEE=${MAX_EE_R1}"
+echo "🧪 DADA2 paired-end with trunc-len-f=${TRUNC_LEN_F}, trunc-len-r=${TRUNC_LEN_R}, maxEE-f=${MAX_EE_F}, maxEE-r=${MAX_EE_R} (reads joined)"
 echo
 
 # ── 0) VERIFY FILES & PAIRS ────────────────────────────────────────────
@@ -115,46 +119,18 @@ if [[ ! -f "$OUT_DIR/trimmed-paired.qzv" ]]; then
     --o-visualization "$OUT_DIR/trimmed-paired.qzv" || true
 fi
 
-# ── 4) EXPORT TRIMMED READS, DROP R2 & QIIME FILES, RE-IMPORT R1 ───────
-TRIM_EXPORT="$OUT_DIR/trimmed-export"
-if [[ ! -f "$OUT_DIR/trimmed-R1.qza" ]]; then
-  echo "📤 Exporting trimmed reads and keeping R1 only…"
-  mkdir -p "$TRIM_EXPORT"
-  if [[ -z "$(ls -A "$TRIM_EXPORT" 2>/dev/null)" ]]; then
-    qiime tools export --input-path "$OUT_DIR/trimmed-paired.qza" --output-path "$TRIM_EXPORT"
-  else
-    echo "⏩ Export dir not empty; using existing files."
-  fi
-  # Remove R2 fastqs, MANIFEST, metadata.yml so Casava importer accepts the dir
-  find "$TRIM_EXPORT" -type f -name "*_R2_001.fastq.gz" -delete
-  rm -f "$TRIM_EXPORT/MANIFEST" "$TRIM_EXPORT/metadata.yml" || true
-
-  echo "📥 Re-importing R1 as single-end (Casava)…"
-  qiime tools import \
-    --type 'SampleData[SequencesWithQuality]' \
-    --input-path "$TRIM_EXPORT" \
-    --input-format CasavaOneEightSingleLanePerSampleDirFmt \
-    --output-path "$OUT_DIR/trimmed-R1.qza"
-else
-  echo "⏩ Skipping re-import (found trimmed-R1.qza)"
-fi
-
-# Optional QZV for R1-only
-if [[ ! -f "$OUT_DIR/trimmed-R1.qzv" ]]; then
-  qiime demux summarize \
-    --i-data "$OUT_DIR/trimmed-R1.qza" \
-    --o-visualization "$OUT_DIR/trimmed-R1.qzv" || true
-fi
-
-# ── 5) DADA2 DENOISE-SINGLE (R1 only) ──────────────────────────────────
+# ── 4) DADA2 DENOISE-PAIRED (joins reads) ──────────────────────────────
 if [[ ! -f "$OUT_DIR/COI-table.qza" || ! -f "$OUT_DIR/COI-rep-seqs.qza" ]]; then
-  echo "⚙️  Running DADA2 denoise-single on R1…"
-  qiime dada2 denoise-single \
-    --i-demultiplexed-seqs "$OUT_DIR/trimmed-R1.qza" \
-    --p-trim-left 0 \
-    --p-trunc-len "$TRUNC_LEN_R1" \
-    --p-max-ee "$MAX_EE_R1" \
-    --p-n-threads 1 \
+  echo "⚙️  Running DADA2 denoise-paired with joining…"
+  qiime dada2 denoise-paired \
+    --i-demultiplexed-seqs "$OUT_DIR/trimmed-paired.qza" \
+    --p-trim-left-f "$TRIM_LEFT_F" \
+    --p-trim-left-r "$TRIM_LEFT_R" \
+    --p-trunc-len-f "$TRUNC_LEN_F" \
+    --p-trunc-len-r "$TRUNC_LEN_R" \
+    --p-max-ee-f "$MAX_EE_F" \
+    --p-max-ee-r "$MAX_EE_R" \
+    --p-n-threads 0 \
     --o-table "$OUT_DIR/COI-table.qza" \
     --o-representative-sequences "$OUT_DIR/COI-rep-seqs.qza" \
     --o-denoising-stats "$OUT_DIR/COI-denoising-stats.qza" \
@@ -163,7 +139,7 @@ else
   echo "⏩ Skipping DADA2 (found COI-table/rep-seqs)"
 fi
 
-# ── 6) VISUALIZE DADA2 OUTPUTS ─────────────────────────────────────────
+# ── 5) VISUALIZE DADA2 OUTPUTS ─────────────────────────────────────────
 if [[ ! -f "$OUT_DIR/COI-denoising-stats.qzv" ]]; then
   echo "📈 Making QZVs (denoise stats, rep seqs)…"
   qiime metadata tabulate \
@@ -179,7 +155,7 @@ fi
 echo "🔗 View stats: $OUT_DIR/COI-denoising-stats.qzv"
 echo "🔗 View reps:  $OUT_DIR/COI-rep-seqs.qzv"
 
-# ── 7) EXPORTS ──────────────────────────────────────────────────────────
+# ── 6) EXPORTS ──────────────────────────────────────────────────────────
 if [[ ! -f "$EXPORT_DIR/feature-table.biom" || ! -f "$EXPORT_DIR/dna-sequences.fasta" ]]; then
   echo "📤 Exporting feature-table and rep-seqs…"
   qiime tools export --input-path "$OUT_DIR/COI-table.qza"    --output-path "$EXPORT_DIR"
@@ -188,7 +164,7 @@ else
   echo "⏩ Skipping export (found BIOM/FASTA in $EXPORT_DIR)"
 fi
 
-# ── 8) BIOM → TSV + ID LIST ────────────────────────────────────────────
+# ── 7) BIOM → TSV + ID LIST ────────────────────────────────────────────
 if [[ ! -f "$EXPORT_DIR/feature-table.tsv" ]]; then
   echo "🛠 Converting BIOM → TSV…"
   if [[ -f "$EXPORT_DIR/feature-table.biom" ]]; then
@@ -208,7 +184,7 @@ else
   echo "⏩ Skipping ID list (found filtered-otu-ids.txt)"
 fi
 
-# ── 9) FILTER REP SEQS BY VALID IDs ────────────────────────────────────
+# ── 8) FILTER REP SEQS BY VALID IDs ────────────────────────────────────
 if [[ -f "$EXPORT_DIR/dna-sequences.fasta" && ! -f "$EXPORT_DIR/dna-sequences-validated.fasta" ]]; then
   echo "🔬 Filtering rep sequences by valid OTUs…"
   mv "$EXPORT_DIR/dna-sequences.fasta" "$EXPORT_DIR/dna-sequences-all.fasta"
@@ -222,7 +198,7 @@ else
   echo "⏩ Skipping rep-seq filter (validated.fasta exists or input missing)"
 fi
 
-# ── 10) PUBLISH CANONICAL OUTPUTS (for your later scripts) ─────────────
+# ── 9) PUBLISH CANONICAL OUTPUTS (for your later scripts) ──────────────
 echo "📦 Publishing canonical outputs…"
 
 # a) FASTA for BOLDigger + place for boldigger3_data
@@ -242,5 +218,5 @@ echo "📂 Run folder: $OUT_DIR"
 echo "📝 Log:        $LOG"
 echo "📦 Canonical:  ${CANON_EXPORT_FILTERED}  (FASTA for BOLDigger)"
 echo "📦 Canonical:  ${CANON_BIOINFO_FILES}   (COI-table.qza + feature-table.*)"
-echo "🔗 QZVs:       paired-end-demux.qzv, trimmed-paired.qzv, trimmed-R1.qzv, COI-denoising-stats.qzv, COI-rep-seqs.qzv"
-echo "🧪 Params:     TRUNC_LEN_R1=${TRUNC_LEN_R1}  MAX_EE_R1=${MAX_EE_R1}  Cutadapt err=${CUTADAPT_ERROR_RATE}, ovlp=${CUTADAPT_MIN_OVERLAP}"
+echo "🔗 QZVs:       paired-end-demux.qzv, trimmed-paired.qzv, COI-denoising-stats.qzv, COI-rep-seqs.qzv"
+echo "🧪 Params:     TRUNC_LEN_F=${TRUNC_LEN_F}  TRUNC_LEN_R=${TRUNC_LEN_R}  MAX_EE_F=${MAX_EE_F}  MAX_EE_R=${MAX_EE_R}  Cutadapt err=${CUTADAPT_ERROR_RATE}, ovlp=${CUTADAPT_MIN_OVERLAP}"

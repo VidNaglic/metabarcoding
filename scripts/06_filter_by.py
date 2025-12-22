@@ -3,19 +3,19 @@ import pandas as pd
 import os
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
-input_csv  = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/processed_data/04_arthropoda_renamed_samples.csv"
-output_dir = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/processed_data/filtered_output"
+input_csv  = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/processed_data/04_arthropoda_renamed_samples.csv"
+output_dir = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/processed_data/filtered_output"
 os.makedirs(output_dir, exist_ok=True)
 
 output_excel  = os.path.join(output_dir, "filtered_ASV_table.xlsx")
 summary_txt   = os.path.join(output_dir, "filtering_summary.txt")
 
-# Filtering thresholds
-remove_singletons      = True
-min_total_abundance    = 10
-min_relative_abundance = 0.00001
+# Filtering thresholds (balanced for R1-only Leray on NextSeq 2×150)
+remove_singletons      = True    # drop ASVs seen in only one sample
+min_total_abundance    = 5       # require at least 5 total reads
+min_relative_abundance = 0.000001  # global relative abundance cutoff
 min_sample_reads       = 100
-min_richness           = 5
+min_richness           = 2       # ASV must appear in ≥2 samples
 
 # ─── LOAD DATA ─────────────────────────────────────────────────────────────
 df = pd.read_csv(input_csv)
@@ -28,6 +28,10 @@ tax_cols = df.columns[first_tax_col:]
 # Split sample counts and taxonomic/meta data
 asv_table = df[sample_cols].copy()
 tax_table = df[tax_cols].copy()
+
+# Track unique taxonomy assignments before filtering
+tax_ranks = ["species_x", "genus_x", "family_x"]
+unique_before = {rank: tax_table[rank].dropna().nunique() if rank in tax_table else 0 for rank in tax_ranks}
 
 # Store initial shapes
 initial_asvs = asv_table.shape[0]
@@ -78,6 +82,10 @@ summary.append(f"Removed {removed} ASVs with richness < {min_richness}")
 
 # ─── OUTPUT ────────────────────────────────────────────────────────────────
 filtered = pd.concat([asv_table, tax_table], axis=1)
+
+# Track unique taxonomy assignments after filtering
+unique_after = {rank: tax_table[rank].dropna().nunique() if rank in tax_table else 0 for rank in tax_ranks}
+
 filtered.to_excel(output_excel, index=False)
 
 with open(summary_txt, "w") as f:
@@ -88,6 +96,10 @@ with open(summary_txt, "w") as f:
     f.write(f"Final Samples: {asv_table.shape[1]}\n\n")
     for line in summary:
         f.write(f"{line}\n")
+    f.write("\n--- Taxonomy assignments ---\n")
+    for rank in tax_ranks:
+        f.write(f"{rank.replace('_x','').title()} unique before: {unique_before[rank]}\n")
+        f.write(f"{rank.replace('_x','').title()} unique after : {unique_after[rank]}\n")
 
 print("✅ Filtering complete.")
 print(f"→ Output table: {output_excel}")

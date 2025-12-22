@@ -4,8 +4,8 @@ import os
 import re
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
-input_file  = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/joined_coi_bold_results.csv"
-output_dir  = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_travniki/bioinfo/processed_data/"
+input_file  = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/joined_coi_bold_results.csv"
+output_dir  = "/mnt/c/Users/vidna/Documents/mtb/data/mtb_forest_PHK/bioinfo/processed_data/"
 os.makedirs(output_dir, exist_ok=True)
 
 chunk_size  = 100_000
@@ -46,32 +46,35 @@ thresholds = {
 # strings that should be treated as missing taxonomy
 to_null = {"no-match", "IncompleteTaxonomy", "IncompleteTaxnonmy"}
 
-# sample renaming map
+# sample renaming map (from metadata IDs)
 sample_mapping = {
-    "KIS0001": "suh_a/1",  "KIS0002": "suh_a/2",  "KIS0003": "suh_a/3",
-    "KIS0004": "suh_b/1",  "KIS0005": "suh_b/2",  "KIS0006": "suh_b/3",
-    "KIS0007": "suh_d/1",  "KIS0008": "suh_d/2",  "KIS0009": "suh_d/3",
-    "KIS0010": "brk_a/1",  "KIS0011": "brk_a/2",  "KIS0012": "brk_a/3",
-    "KIS0013": "brk_b/1",  "KIS0014": "brk_b/2",  "KIS0015": "brk_b/3",
-    "KIS0016": "brk_c/1",  "KIS0017": "brk_c/2",  "KIS0018": "brk_c/3",
-    "KIS0019": "brk_d/1",  "KIS0020": "brk_d/2",  "KIS0021": "brk_d/3",
-    "KIS0022": "kan_b/1",  "KIS0023": "kan_b/2",  "KIS0024": "kan_b/3",
-    "KIS0025": "kan_b/1/20", "KIS0026": "kan_b/2/20", "KIS0027": "kan_b/3/20",
-    "KIS0028": "kan_c/1",  "KIS0029": "kan_c/2",  "KIS0030": "kan_c/3",
-    "KIS0031": "kan_d/1",  "KIS0032": "kan_d/2",  "KIS0033": "kan_d/3",
-    "KIS0034": "koz_a/1",  "KIS0035": "koz_a/2",  "KIS0036": "koz_a/3",
-    "KIS0037": "koz_b/1",  "KIS0038": "koz_b/2",  "KIS0039": "koz_b/3",
-    "KIS0040": "koz_c/1",  "KIS0041": "koz_c/2",  "KIS0042": "koz_c/3",
-    "KIS0043": "koz_d/1",  "KIS0044": "koz_d/2",  "KIS0045": "koz_d/3",
-    "KIS0046": "boh_a/1",  "KIS0047": "boh_a/2",  "KIS0048": "boh_a/3",
-    "KIS0049": "boh_b/1",  "KIS0050": "boh_b/2",  "KIS0051": "boh_b/3",
-    "KIS0052": "boh_c/1",  "KIS0053": "boh_c/2",  "KIS0054": "boh_c/3",
-    "KIS0055": "boh_d/1",  "KIS0056": "boh_d/2",  "KIS0057": "boh_d/3",
-    "KIS0058": "rak_a/1",  "KIS0059": "rak_a/2",  "KIS0060": "rak_a/3",
-    "KIS0061": "rak_b/1",  "KIS0062": "rak_b/2",  "KIS0063": "rak_b/3",
-    "KIS0064": "rak_c/1",  "KIS0065": "rak_c/2",  "KIS0066": "rak_c/3",
-    "KIS0067": "rak_d/1",  "KIS0068": "rak_d/2",  "KIS0069": "rak_d/3",
+    "KIS_0069": "B1_A",
+    "KIS_0070": "B1_C",
+    "KIS_0071": "B1_F",
+    "KIS_0072": "B1_ART",
+    "KIS_0073": "B1_RT",
+    "KIS_0074": "B2_A",
+    "KIS_0075": "B2_C",
+    "KIS_0076": "B2_F",
+    "KIS_0077": "B2_ART",
+    "KIS_0078": "B2_RT",
+    "KIS_0079": "B3_A",
+    "KIS_0080": "B3_C",
+    "KIS_0081": "B3_F",
+    "KIS_0082": "B3_ART",
+    "KIS_0083": "B3_RT",
+    "KIS_0084": "B4_A",
+    "KIS_0085": "B4_C",
+    "KIS_0086": "B4_F",
+    "KIS_0087": "B4_ART",
+    "KIS_0088": "B4_RT",
+    "KIS_0089": "Skov_1A",
+    "KIS_0090": "Skov_1B",
+    "KIS_0091": "Skov_2A",
+    "KIS_0092": "Skov_3A",
 }
+# allow lookups with or without underscore
+sample_mapping = {k: v for k, v in sample_mapping.items()} | {k.replace("_", ""): v for k, v in sample_mapping.items()}
 
 # Counters for summary
 total_otus      = 0
@@ -125,11 +128,14 @@ for i, chunk in enumerate(pd.read_csv(input_file, chunksize=chunk_size)):
                 header=not os.path.exists(output_filtered_identity))
 
     # rename sample columns according to KIS→site mapping
-    sample_cols = [c for c in arth.columns if re.match(r"KIS\d{4}", c)]
-    rename_map  = {
-        col: sample_mapping.get(re.match(r"(KIS\d{4})", col).group(1), col)
-        for col in sample_cols
-    }
+    sample_cols = [c for c in arth.columns if re.match(r"KIS_?\d{4}", c)]
+    rename_map  = {}
+    for col in sample_cols:
+        m = re.match(r"(KIS_?\d{4})", col)
+        if not m:
+            continue
+        code = m.group(1)
+        rename_map[col] = sample_mapping.get(code, sample_mapping.get(code.replace("_", ""), col))
     arth = arth.rename(columns=rename_map)
     arth.to_csv(output_renamed_table, mode='a', index=False,
                 header=not os.path.exists(output_renamed_table))
